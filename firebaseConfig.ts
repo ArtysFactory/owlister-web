@@ -1,9 +1,9 @@
 
-import firebase from "firebase/app";
-import "firebase/firestore";
-import "firebase/auth";
-import "firebase/storage";
-import "firebase/analytics";
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/auth';
+import 'firebase/compat/firestore';
+import 'firebase/compat/storage';
+import 'firebase/compat/analytics';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCpLEKhHKr1zy98uyIlIRKPgPW9r22uqFc",
@@ -15,7 +15,7 @@ const firebaseConfig = {
   measurementId: "G-DN8G2K0606"
 };
 
-// Initialize Firebase (v8 compat)
+// Initialize Firebase
 if (!firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
 }
@@ -27,7 +27,6 @@ const storage = app.storage();
 
 let analytics = null;
 if (typeof window !== 'undefined') {
-  // Graceful check for analytics support
   if (firebase.analytics && typeof firebase.analytics === 'function') {
       analytics = firebase.analytics();
   }

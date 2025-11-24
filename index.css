@@ -9,7 +9,6 @@ body {
   min-height: 100vh;
 }
 
-/* Scrollbar Hide Utility */
 .scrollbar-hide::-webkit-scrollbar {
     display: none;
 }
@@ -18,13 +17,10 @@ body {
     scrollbar-width: none;
 }
 
-/* Editor Content Styles (Typography override) */
+/* Typography Overrides */
 .prose h1 { font-family: 'Anton', sans-serif; font-size: 2.5rem; margin-bottom: 1rem; color: white; }
 .prose h2 { font-family: 'Anton', sans-serif; font-size: 2rem; margin-bottom: 0.8rem; color: white; }
 .prose p { margin-bottom: 1rem; line-height: 1.6; color: #d1d5db; }
 .prose img { border-radius: 0.5rem; margin: 1.5rem 0; width: 100%; }
-.prose iframe { width: 100%; aspect-ratio: 16/9; border-radius: 0.5rem; margin: 1.5rem 0; }
-.prose ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1rem; color: #d1d5db; }
-.prose ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 1rem; color: #d1d5db; }
-.prose blockquote { border-left: 4px solid #b026ff; padding-left: 1rem; font-style: italic; color: #9ca3af; }
 .prose strong { color: white; font-weight: 700; }
+.prose blockquote { border-left: 4px solid #b026ff; padding-left: 1rem; font-style: italic; color: #9ca3af; }

@@ -7,8 +7,8 @@ import RichTextEditor from './components/RichTextEditor';
 import ShareModal from './components/ShareModal';
 import CommentSection from './components/CommentSection';
 import { Article, Comic, ContentItem, ContentType, Comment, Subscriber, User, UserRole, Language } from './types';
-import { loadContent, saveContentItem, deleteContentItem, loadComments, deleteComment, loadSubscribers, loginUser, registerUser, getCurrentUser, uploadImageFile, checkAuthState } from './services/storage';
-import { Heart, Share2, Clock, ArrowLeft, Trash2, Plus, Upload, FileText, Film, Mail, MessageCircle, Sparkles, Brain, Image as ImageIcon, Video as VideoIcon, Download, Loader2, UserPlus, Languages, Send } from 'lucide-react';
+import { loadContent, saveContentItem, deleteContentItem, loadComments, deleteComment, loadSubscribers, loginUser, registerUser, getCurrentUser, uploadImageFile, checkAuthState, loginWithProvider } from './services/storage';
+import { Heart, Share2, Clock, ArrowLeft, Trash2, Plus, Upload, FileText, Film, Mail, MessageCircle, Sparkles, Brain, Image as ImageIcon, Video as VideoIcon, Download, Loader2, UserPlus, Languages, Send, Chrome, Linkedin, Apple } from 'lucide-react';
 
 // --- AI HELPER ---
 const generateText = async (prompt: string): Promise<string> => {
@@ -62,6 +62,24 @@ const Login = () => {
     }
   };
 
+  const handleProviderLogin = async (provider: 'google' | 'apple' | 'linkedin') => {
+      setError('');
+      setLoading(true);
+      try {
+          await loginWithProvider(provider);
+          navigate('/');
+      } catch (err: any) {
+          console.error(err);
+          // Friendly error message for users
+          let msg = "Login failed.";
+          if (err.code === 'auth/operation-not-allowed') msg = "This provider is not enabled in Firebase Console yet.";
+          if (err.code === 'auth/popup-closed-by-user') msg = "Login cancelled.";
+          setError(msg);
+      } finally {
+          setLoading(false);
+      }
+  };
+
   return (
     <div className="min-h-screen pt-32 px-4 flex items-center justify-center">
       <div className="max-w-md w-full bg-card-bg border border-neon-green/30 p-8 rounded-2xl shadow-2xl shadow-neon-purple/10">
@@ -69,6 +87,26 @@ const Login = () => {
         <p className="text-center text-gray-400 mb-8 text-sm font-roboto tracking-wider">ACCESS THE NETWORK</p>
         
         {error && <div className="bg-red-500/20 text-red-400 p-3 rounded mb-4 text-sm text-center">{error}</div>}
+
+        <div className="flex flex-col gap-3 mb-6">
+            <button onClick={() => handleProviderLogin('google')} className="flex items-center justify-center gap-3 bg-white hover:bg-gray-200 text-black font-bold py-2.5 rounded transition-colors uppercase tracking-wide text-sm">
+                <Chrome size={18} /> Continue with Google
+            </button>
+            <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => handleProviderLogin('apple')} className="flex items-center justify-center gap-2 bg-black border border-gray-700 hover:border-white text-white font-bold py-2.5 rounded transition-colors uppercase tracking-wide text-sm">
+                    <Apple size={18} /> Apple
+                </button>
+                <button onClick={() => handleProviderLogin('linkedin')} className="flex items-center justify-center gap-2 bg-[#0077b5] hover:bg-[#005e93] text-white font-bold py-2.5 rounded transition-colors uppercase tracking-wide text-sm">
+                    <Linkedin size={18} /> LinkedIn
+                </button>
+            </div>
+        </div>
+
+        <div className="flex items-center gap-4 mb-6">
+            <div className="h-px bg-gray-700 flex-1"></div>
+            <span className="text-gray-500 text-xs uppercase">Or with frequency code</span>
+            <div className="h-px bg-gray-700 flex-1"></div>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {isRegister && (

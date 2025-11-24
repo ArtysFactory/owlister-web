@@ -1,4 +1,3 @@
-
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/auth';
 import 'firebase/compat/firestore';
@@ -24,6 +23,15 @@ const app = firebase.app();
 const db = app.firestore();
 const auth = app.auth();
 const storage = app.storage();
+
+// Enable offline persistence to avoid "client is offline" errors
+db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+  if (err.code === 'failed-precondition') {
+    console.warn('Persistence failed: Multiple tabs open');
+  } else if (err.code === 'unimplemented') {
+    console.warn('Persistence failed: Browser not supported');
+  }
+});
 
 let analytics = null;
 if (typeof window !== 'undefined') {

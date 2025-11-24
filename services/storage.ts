@@ -1,7 +1,8 @@
-
 import { ContentItem, Comment, Subscriber, User, UserRole, ContentType, Article, Comic } from "../types";
 import { MOCK_ARTICLES, MOCK_COMICS } from "../constants";
 import { db, auth, storage } from "../firebaseConfig";
+import firebase from 'firebase/compat/app';
+
 // Note: We avoid importing from "firebase/..." packages directly to prevent version mismatch errors.
 // We use the instances exported from firebaseConfig which are initialized with the available SDK version (v8 compat).
 
@@ -15,21 +16,26 @@ const SUBS_COLLECTION = 'subscribers';
 export const checkAuthState = (callback: (user: User | null) => void) => {
   return auth.onAuthStateChanged(async (firebaseUser) => {
     if (firebaseUser) {
-        // Fetch extended profile
-        const userDoc = await db.collection(USERS_COLLECTION).doc(firebaseUser.uid).get();
-        if (userDoc.exists) {
-            callback(userDoc.data() as User);
-        } else {
-            // Fallback if doc missing but auth exists
-             const partialUser: User = {
-                id: firebaseUser.uid,
-                name: firebaseUser.displayName || 'Anon',
-                email: firebaseUser.email || '',
-                role: UserRole.READER,
-                avatar: firebaseUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${firebaseUser.uid}`
-             };
-             callback(partialUser);
+        try {
+            // Try to fetch extended profile from Firestore
+            const userDoc = await db.collection(USERS_COLLECTION).doc(firebaseUser.uid).get();
+            if (userDoc.exists) {
+                callback(userDoc.data() as User);
+                return;
+            }
+        } catch (e) {
+            console.warn("Firestore access failed (likely offline), utilizing Auth profile fallback.", e);
         }
+
+        // Fallback: If doc missing or DB offline, reconstruct from Auth data
+        const partialUser: User = {
+            id: firebaseUser.uid,
+            name: firebaseUser.displayName || 'Anon',
+            email: firebaseUser.email || '',
+            role: UserRole.READER,
+            avatar: firebaseUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${firebaseUser.uid}`
+        };
+        callback(partialUser);
     } else {
         callback(null);
     }
@@ -40,10 +46,88 @@ export const loginUser = async (email: string, password?: string): Promise<User 
     if (!password) throw new Error("Password required");
     const cred = await auth.signInWithEmailAndPassword(email, password);
     if (cred.user) {
-        const userDoc = await db.collection(USERS_COLLECTION).doc(cred.user.uid).get();
-        return userDoc.exists ? userDoc.data() as User : null;
+        try {
+            const userDoc = await db.collection(USERS_COLLECTION).doc(cred.user.uid).get();
+            return userDoc.exists ? userDoc.data() as User : {
+                id: cred.user.uid,
+                name: cred.user.displayName || 'User',
+                email: cred.user.email || '',
+                role: UserRole.READER,
+                avatar: cred.user.photoURL || ''
+            };
+        } catch (e) {
+             // Offline fallback
+             return {
+                id: cred.user.uid,
+                name: cred.user.displayName || 'User',
+                email: cred.user.email || '',
+                role: UserRole.READER,
+                avatar: cred.user.photoURL || ''
+            };
+        }
     }
     return null;
+};
+
+export const loginWithProvider = async (providerName: 'google' | 'apple' | 'linkedin'): Promise<User | null> => {
+    let provider: firebase.auth.AuthProvider;
+
+    switch (providerName) {
+        case 'google':
+            provider = new firebase.auth.GoogleAuthProvider();
+            break;
+        case 'apple':
+            provider = new firebase.auth.OAuthProvider('apple.com');
+            break;
+        case 'linkedin':
+            // Requires OIDC configuration in Firebase Console
+            provider = new firebase.auth.OAuthProvider('oidc.linkedin');
+            break;
+        default:
+            throw new Error("Unknown provider");
+    }
+
+    try {
+        const result = await auth.signInWithPopup(provider);
+        if (result.user) {
+            const userDocRef = db.collection(USERS_COLLECTION).doc(result.user.uid);
+            
+            try {
+                const userDoc = await userDocRef.get();
+
+                if (!userDoc.exists) {
+                    // Create new user document automatically
+                    const newUser: User = {
+                        id: result.user.uid,
+                        name: result.user.displayName || 'Nomad',
+                        email: result.user.email || '',
+                        role: UserRole.READER, // Default role
+                        avatar: result.user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${result.user.uid}`,
+                        bio: 'Connected via social network.'
+                    };
+                    await userDocRef.set(newUser);
+                    return newUser;
+                } else {
+                    return userDoc.data() as User;
+                }
+            } catch (firestoreErr) {
+                console.warn("Firestore offline during provider login. Returning auth data.", firestoreErr);
+                // Fallback to auth data so user can still enter app
+                return {
+                    id: result.user.uid,
+                    name: result.user.displayName || 'Nomad',
+                    email: result.user.email || '',
+                    role: UserRole.READER,
+                    avatar: result.user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${result.user.uid}`,
+                    bio: 'Offline Mode'
+                };
+            }
+        }
+        return null;
+    } catch (error: any) {
+        console.error("Provider login error:", error);
+        throw error;
+    }
 };
 
 export const registerUser = async (name: string, email: string, role: UserRole, password?: string): Promise<User> => {

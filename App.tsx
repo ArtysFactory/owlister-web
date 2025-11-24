@@ -215,7 +215,7 @@ const Home = ({ language }: { language: Language }) => {
       ) : (
         <div className="columns-1 md:columns-2 lg:columns-3 gap-6 space-y-6">
             {content.map((item) => (
-            <div key={item.id} className="break-inside-avoid bg-card-bg/80 backdrop-blur-sm rounded-xl border border-neon-green overflow-hidden hover:border-neon-purple hover:shadow-[0_0_20px_rgba(176,38,255,0.3)] transition-all duration-300 group">
+            <div key={item.id} className="break-inside-avoid bg-card-bg rounded-xl border border-neon-green overflow-hidden hover:border-neon-purple hover:shadow-[0_0_20px_rgba(176,38,255,0.3)] transition-all duration-300 group">
                 <Link to={item.type === ContentType.ARTICLE ? `/article/${item.id}` : `/comic/${item.id}`}>
                 <div className="relative aspect-[4/3] overflow-hidden">
                     <img src={item.coverImage} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />

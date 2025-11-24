@@ -12,12 +12,12 @@ import { Heart, Share2, Clock, ArrowLeft, Trash2, Plus, Upload, FileText, Film, 
 
 // --- AI HELPER ---
 const generateText = async (prompt: string): Promise<string> => {
-  if (!process.env.API_KEY) {
+  if (!import.meta.env.VITE_GEMINI_API_KEY) {
     alert("API_KEY not found in environment.");
     return "";
   }
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
@@ -510,7 +510,7 @@ const AdminDashboard = () => {
 
     try {
         if (genMode === 'image') {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
             setGenStatus("Dreaming up visuals (Imagen 3)...");
             const response = await ai.models.generateImages({
                 model: 'imagen-4.0-generate-001',
@@ -525,7 +525,7 @@ const AdminDashboard = () => {
                  setGenStatus("Waiting for API Key selection...");
                  await win.aistudio.openSelectKey();
             }
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
             setGenStatus("Queueing video generation (Veo)...");
             let operation = await ai.models.generateVideos({
                 model: 'veo-3.1-fast-generate-preview',
@@ -540,7 +540,7 @@ const AdminDashboard = () => {
             if(operation.response?.generatedVideos?.[0]?.video?.uri) {
                 const uri = operation.response.generatedVideos[0].video.uri;
                 setGenStatus("Downloading stream...");
-                const res = await fetch(`${uri}&key=${process.env.API_KEY}`);
+                const res = await fetch(`${uri}&key=${import.meta.env.VITE_GEMINI_API_KEY}`);
                 const blob = await res.blob();
                 setGenResult(URL.createObjectURL(blob));
             }
@@ -561,7 +561,7 @@ const AdminDashboard = () => {
       setChatHistory(prev => [...prev, { role: 'user', text: userMsg }]);
       setChatLoading(true);
       try {
-          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+          const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
           const chat = ai.chats.create({
               model: 'gemini-2.5-flash',
               history: chatHistory.map(h => ({ role: h.role, parts: [{ text: h.text }] }))

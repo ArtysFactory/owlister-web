@@ -49,10 +49,9 @@ const Login = () => {
     try {
       if (isRegister) {
         await registerUser(name, email, role, password);
-        // Force a small delay or reload to ensure state propagates
+        // Force a hard reload to ensure LocalStorage is read correctly by checkAuthState on mount
         setTimeout(() => {
-           // We navigate to home, Nav component will pick up the user from LocalStorage/Auth
-           window.location.href = "/"; 
+           window.location.reload(); 
         }, 500);
       } else {
         const user = await loginUser(email, password);
@@ -74,7 +73,6 @@ const Login = () => {
           navigate('/');
       } catch (err: any) {
           console.error(err);
-          // Friendly error message for users
           let msg = "Login failed.";
           if (err.code === 'auth/operation-not-allowed') msg = "This provider is not enabled in Firebase Console yet.";
           if (err.code === 'auth/popup-closed-by-user') msg = "Login cancelled.";

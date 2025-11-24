@@ -16,45 +16,51 @@ const timeoutPromise = (ms: number) => new Promise((_, reject) => setTimeout(() 
 export const checkAuthState = (callback: (user: User | null) => void) => {
   return auth.onAuthStateChanged(async (firebaseUser) => {
     if (firebaseUser) {
-        let userProfile: User | null = null;
-        
         try {
-            // Fetch profile with error swallowing
+            // 1. Try LocalStorage (Fastest & Most Reliable for new registrations)
+            const cachedRole = localStorage.getItem(`role_${firebaseUser.uid}`);
+            
+            // 2. Try DB with short timeout
             const fetchProfile = async () => {
                  try {
                     const doc = await db.collection(USERS_COLLECTION).doc(firebaseUser.uid).get();
                     return doc.exists ? doc.data() as User : null;
                  } catch (err) {
-                    console.warn("DB Read Error (Offline?):", err);
-                    return null; // Return null to fallback to basic auth
+                    return null;
                  }
             };
 
-            // Race between DB fetch and a short timeout. 
-            userProfile = await Promise.race([
+            const userProfile = await Promise.race([
                 fetchProfile(),
                 timeoutPromise(2000).then(() => null)
             ]) as User | null;
 
-        } catch (e) {
-            console.warn("Auth check timed out or failed, using basic profile.");
-        }
-
-        if (userProfile) {
-            // Update local cache with fresh data from DB
-            localStorage.setItem(`role_${firebaseUser.uid}`, userProfile.role);
-            callback(userProfile);
-        } else {
-             // Fallback: Reconstruct from Auth data immediately
-             // IMPORTANT: Check LocalStorage for the Role to prevent reverting to READER
-            const cachedRole = localStorage.getItem(`role_${firebaseUser.uid}`);
+            if (userProfile) {
+                // Update cache if we got fresh data
+                localStorage.setItem(`role_${firebaseUser.uid}`, userProfile.role);
+                callback(userProfile);
+                return;
+            } 
             
+            // 3. FALLBACK: Reconstruct from Auth + Cached Role
+            // This catches the case where DB write is slow/offline but LocalStorage was set by registerUser
             const partialUser: User = {
                 id: firebaseUser.uid,
                 name: firebaseUser.displayName || 'Anon',
                 email: firebaseUser.email || '',
-                role: (cachedRole as UserRole) || UserRole.READER,
+                role: (cachedRole as UserRole) || UserRole.READER, 
                 avatar: firebaseUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${firebaseUser.uid}`
+            };
+            callback(partialUser);
+
+        } catch (e) {
+            // Extreme fallback
+            const partialUser: User = {
+                id: firebaseUser.uid,
+                name: firebaseUser.displayName || 'Anon',
+                email: firebaseUser.email || '',
+                role: (localStorage.getItem(`role_${firebaseUser.uid}`) as UserRole) || UserRole.READER,
+                avatar: firebaseUser.photoURL || ''
             };
             callback(partialUser);
         }
@@ -67,12 +73,12 @@ export const checkAuthState = (callback: (user: User | null) => void) => {
 export const loginUser = async (email: string, password?: string): Promise<User | null> => {
     if (!password) throw new Error("Password required");
     const cred = await auth.signInWithEmailAndPassword(email, password);
-    // Return a basic object immediately, let checkAuthState handle the rest
+    // Return basic info, let checkAuthState handle the rest
     return {
         id: cred.user!.uid,
         name: cred.user!.displayName || 'User',
         email: cred.user!.email || '',
-        role: UserRole.READER, // Role will be updated by checkAuthState via DB or Cache
+        role: UserRole.READER,
         avatar: cred.user!.photoURL || ''
     };
 };
@@ -99,34 +105,29 @@ export const loginWithProvider = async (providerName: 'google' | 'apple' | 'link
         if (result.user) {
             const userDocRef = db.collection(USERS_COLLECTION).doc(result.user.uid);
             
-            // Try to create/get user doc with timeout and error swallowing
+            // Optimistic attempt to create user doc
             try {
                 await Promise.race([
                     (async () => {
-                        try {
-                            const userDoc = await userDocRef.get();
-                            if (!userDoc.exists) {
-                                const newUser: User = {
-                                    id: result.user!.uid,
-                                    name: result.user!.displayName || 'Nomad',
-                                    email: result.user!.email || '',
-                                    role: UserRole.READER,
-                                    avatar: result.user!.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${result.user!.uid}`,
-                                    bio: 'Connected via social network.'
-                                };
-                                await userDocRef.set(newUser).catch(e => console.warn("Write failed", e));
-                            }
-                        } catch (e) {
-                            console.warn("Firestore error during provider login", e);
+                        const userDoc = await userDocRef.get();
+                        if (!userDoc.exists) {
+                            const newUser: User = {
+                                id: result.user!.uid,
+                                name: result.user!.displayName || 'Nomad',
+                                email: result.user!.email || '',
+                                role: UserRole.READER,
+                                avatar: result.user!.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${result.user!.uid}`,
+                                bio: 'Connected via social network.'
+                            };
+                            await userDocRef.set(newUser).catch(() => {});
                         }
                     })(),
-                    timeoutPromise(3000)
+                    timeoutPromise(2000)
                 ]);
             } catch (firestoreErr) {
-                console.warn("Firestore slow during provider login, proceeding anyway.");
+                // Ignore DB errors on login
             }
 
-            // Return basic auth info regardless of DB success
             return {
                 id: result.user.uid,
                 name: result.user.displayName || 'Nomad',
@@ -138,19 +139,22 @@ export const loginWithProvider = async (providerName: 'google' | 'apple' | 'link
         }
         return null;
     } catch (error: any) {
-        console.error("Provider login error:", error);
         throw error;
     }
 };
 
 export const registerUser = async (name: string, email: string, role: UserRole, password?: string): Promise<User> => {
     if (!password) throw new Error("Password required");
+    
+    // 1. Create Auth User
     const cred = await auth.createUserWithEmailAndPassword(email, password);
+    
     if (cred.user) {
+        // 2. Update Display Name
         await cred.user.updateProfile({ displayName: name });
         
-        // IMPORTANT: Save role to LocalStorage immediately so checkAuthState can find it
-        // even if DB write fails or is slow
+        // 3. CRITICAL: Cache role immediately in LocalStorage
+        // This is the source of truth if DB write lags
         localStorage.setItem(`role_${cred.user.uid}`, role);
 
         const newUser: User = {
@@ -162,15 +166,10 @@ export const registerUser = async (name: string, email: string, role: UserRole, 
           bio: 'New recruit in the resistance.'
         };
         
-        // Try to save to DB but don't block registration if it fails/hangs
-        try {
-            // Using .set().catch() explicitly to prevent unhandled rejection
-            db.collection(USERS_COLLECTION).doc(newUser.id).set(newUser).catch(e => {
-                console.warn("Offline: Could not save full profile to DB, but Auth created.");
-            });
-        } catch (e) {
-            console.warn("Could not save full profile to DB (likely offline), but Auth created.");
-        }
+        // 4. Fire and forget DB save - do not await strictly to prevent blocking
+        db.collection(USERS_COLLECTION).doc(newUser.id).set(newUser).catch(e => {
+            console.warn("DB Write failed (offline?), but Auth OK. Role cached locally.", e);
+        });
         
         return newUser;
     }
@@ -179,7 +178,6 @@ export const registerUser = async (name: string, email: string, role: UserRole, 
 
 export const getCurrentUser = (): User | null => {
     if (auth.currentUser) {
-        // Try to recover role from cache if possible
         const cachedRole = localStorage.getItem(`role_${auth.currentUser.uid}`);
         return {
             id: auth.currentUser.uid,
@@ -208,7 +206,6 @@ export const loadContent = async (): Promise<ContentItem[]> => {
         if (items.length === 0) return [...MOCK_ARTICLES, ...MOCK_COMICS].map(c => ({...c, originalLanguage: 'fr' as any}));
         return items;
     } catch (e) {
-        // Fallback to mocks if offline or empty
         return [...MOCK_ARTICLES, ...MOCK_COMICS].map(c => ({...c, originalLanguage: 'fr' as any}));
     }
 };

@@ -5,11 +5,18 @@ import { addSubscriber } from '../services/storage';
 
 const Footer: React.FC = () => {
   const [email, setEmail] = useState('');
-  const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 
   const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email && email.includes('@')) {
+    if (!email || !email.includes('@')) {
+      setStatus('error');
+      setTimeout(() => setStatus('idle'), 2000);
+      return;
+    }
+
+    setStatus('loading');
+    try {
       const success = await addSubscriber(email);
       if (success) {
         setStatus('success');
@@ -19,6 +26,10 @@ const Footer: React.FC = () => {
         setStatus('error'); // Already subscribed
         setTimeout(() => setStatus('idle'), 3000);
       }
+    } catch (err) {
+      console.error("Newsletter subscription failed:", err);
+      setStatus('error');
+      setTimeout(() => setStatus('idle'), 3000);
     }
   };
 
@@ -53,11 +64,12 @@ const Footer: React.FC = () => {
                 placeholder="Enter your email" 
                 className="flex-1 bg-white/5 border border-white/10 rounded px-4 py-3 text-white focus:outline-none focus:border-neon-purple transition-colors"
               />
-              <button 
-                type="submit" 
-                className="bg-neon-purple hover:bg-purple-600 text-white font-bold py-3 px-6 rounded transition-colors uppercase tracking-widest font-roboto"
+              <button
+                type="submit"
+                disabled={status === 'loading'}
+                className="bg-neon-purple hover:bg-purple-600 disabled:bg-purple-800 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded transition-colors uppercase tracking-widest font-roboto"
               >
-                {status === 'success' ? 'Joined!' : status === 'error' ? 'Already In' : 'Subscribe'}
+                {status === 'loading' ? 'Sending...' : status === 'success' ? 'Joined!' : status === 'error' ? 'Try Again' : 'Subscribe'}
               </button>
             </form>
           </div>

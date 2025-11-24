@@ -358,12 +358,34 @@ export const loadSubscribers = async (): Promise<Subscriber[]> => {
 export const addSubscriber = async (email: string, language: 'fr'|'en'|'es' = 'fr') => {
     try {
         const docRef = db.collection(SUBS_COLLECTION).doc(email);
-        const docSnap = await docRef.get();
-        if (docSnap.exists) return false;
+
+        // Check if already exists with timeout
+        const checkExists = async () => {
+            const docSnap = await docRef.get();
+            return docSnap.exists;
+        };
+
+        const exists = await Promise.race([
+            checkExists(),
+            timeoutPromise(1000).then(() => false)
+        ]);
+
+        if (exists) {
+            console.log("Subscriber already exists");
+            return false;
+        }
+
+        // Add subscriber with timeout
         const sub: Subscriber = { email, date: new Date().toISOString().split('T')[0], language };
-        await docRef.set(sub);
+        await Promise.race([
+            docRef.set(sub),
+            timeoutPromise(2000)
+        ]);
+
+        console.log("Subscriber added successfully");
         return true;
     } catch (e) {
+        console.error("Error adding subscriber:", e);
         return false;
     }
 };

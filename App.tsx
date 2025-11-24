@@ -8,7 +8,7 @@ import ShareModal from './components/ShareModal';
 import CommentSection from './components/CommentSection';
 import { Article, Comic, ContentItem, ContentType, Comment, Subscriber, User, UserRole, Language } from './types';
 import { loadContent, saveContentItem, deleteContentItem, loadComments, deleteComment, loadSubscribers, loginUser, registerUser, getCurrentUser, uploadImageFile, checkAuthState, loginWithProvider } from './services/storage';
-import { Heart, Share2, Clock, ArrowLeft, Trash2, Plus, Upload, FileText, Film, Mail, MessageCircle, Sparkles, Brain, Image as ImageIcon, Video as VideoIcon, Download, Loader2, UserPlus, Languages, Send, Chrome, Linkedin, Apple } from 'lucide-react';
+import { Heart, Share2, Clock, ArrowLeft, Trash2, Plus, Upload, FileText, Film, Mail, MessageCircle, Sparkles, Brain, Image as ImageIcon, Video as VideoIcon, Download, Loader2, UserPlus, Languages, Send, Chrome, Linkedin, Apple, X, Paperclip } from 'lucide-react';
 
 // --- AI HELPER ---
 const generateText = async (prompt: string): Promise<string> => {
@@ -454,6 +454,8 @@ const AdminDashboard = () => {
   const [genLoading, setGenLoading] = useState(false);
   const [genStatus, setGenStatus] = useState('');
   const [genResult, setGenResult] = useState<string | null>(null);
+  const [contextFile, setContextFile] = useState<File | null>(null);
+  const [contextFilePreview, setContextFilePreview] = useState<string>('');
 
   // Chat
   const [chatHistory, setChatHistory] = useState<{role: 'user' | 'model', text: string}[]>([]);
@@ -502,6 +504,27 @@ const AdminDashboard = () => {
     setNewsletterContent('');
   };
 
+  const handleContextFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setContextFile(file);
+      const reader = new FileReader();
+
+      if (file.type.startsWith('image/')) {
+        reader.onload = (ev) => setContextFilePreview(ev.target?.result as string);
+        reader.readAsDataURL(file);
+      } else if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+        reader.onload = (ev) => setContextFilePreview(ev.target?.result as string);
+        reader.readAsText(file);
+      }
+    }
+  };
+
+  const handleRemoveContextFile = () => {
+    setContextFile(null);
+    setContextFilePreview('');
+  };
+
   const handleGenerateAsset = async () => {
     if (!genPrompt) return;
     setGenLoading(true);
@@ -509,12 +532,22 @@ const AdminDashboard = () => {
     setGenResult(null);
 
     try {
+        // Build enhanced prompt with context if file is provided
+        let enhancedPrompt = genPrompt;
+        if (contextFile && contextFilePreview) {
+            if (contextFile.type.startsWith('image/')) {
+                enhancedPrompt = `${genPrompt}\n\nContext image provided for reference.`;
+            } else if (contextFile.type === 'text/plain') {
+                enhancedPrompt = `${genPrompt}\n\nAdditional context:\n${contextFilePreview}`;
+            }
+        }
+
         if (genMode === 'image') {
             const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
             setGenStatus("Dreaming up visuals (Imagen 3)...");
             const response = await ai.models.generateImages({
                 model: 'imagen-4.0-generate-001',
-                prompt: genPrompt,
+                prompt: enhancedPrompt,
                 config: { numberOfImages: 1, aspectRatio: '16:9' }
             });
             const b64 = response.generatedImages?.[0]?.image?.imageBytes;
@@ -529,7 +562,7 @@ const AdminDashboard = () => {
             setGenStatus("Queueing video generation (Veo)...");
             let operation = await ai.models.generateVideos({
                 model: 'veo-3.1-fast-generate-preview',
-                prompt: genPrompt,
+                prompt: enhancedPrompt,
                 config: { numberOfVideos: 1, resolution: '720p', aspectRatio: '16:9' }
             });
             setGenStatus("Rendering pixels (this may take a moment)...");
@@ -750,7 +783,45 @@ const AdminDashboard = () => {
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <div className="space-y-4">
-                        <textarea value={genPrompt} onChange={e => setGenPrompt(e.target.value)} placeholder={genMode === 'image' ? "Describe your image..." : "Describe your video..."} className="w-full bg-black border border-gray-700 rounded p-3 text-white focus:border-neon-green outline-none h-32 mb-4 resize-none" />
+                        <textarea value={genPrompt} onChange={e => setGenPrompt(e.target.value)} placeholder={genMode === 'image' ? "Describe your image..." : "Describe your video..."} className="w-full bg-black border border-gray-700 rounded p-3 text-white focus:border-neon-green outline-none h-32 resize-none" />
+
+                        {/* Context File Upload */}
+                        <div className="border border-gray-700 rounded-lg p-4 bg-black/30">
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="text-sm text-gray-400 flex items-center gap-2">
+                                    <Paperclip size={14} /> Add Context File (Optional)
+                                </label>
+                            </div>
+
+                            {contextFile ? (
+                                <div className="bg-card-bg border border-neon-green/30 rounded p-3">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-xs text-white font-medium flex items-center gap-2">
+                                            {contextFile.type.startsWith('image/') ? <ImageIcon size={14} className="text-neon-purple" /> : <FileText size={14} className="text-neon-green" />}
+                                            {contextFile.name}
+                                        </span>
+                                        <button onClick={handleRemoveContextFile} className="text-red-400 hover:text-red-300 transition-colors">
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+                                    {contextFile.type.startsWith('image/') && contextFilePreview && (
+                                        <img src={contextFilePreview} alt="Context" className="w-full h-24 object-cover rounded border border-gray-600 mt-2" />
+                                    )}
+                                    {contextFile.type === 'text/plain' && contextFilePreview && (
+                                        <div className="text-xs text-gray-400 mt-2 p-2 bg-black/50 rounded max-h-20 overflow-y-auto">
+                                            {contextFilePreview.substring(0, 200)}{contextFilePreview.length > 200 ? '...' : ''}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-700 hover:border-neon-green rounded-lg p-4 cursor-pointer transition-colors bg-black/20">
+                                    <Upload size={16} className="text-gray-500" />
+                                    <span className="text-sm text-gray-500">Upload image or text file</span>
+                                    <input type="file" className="hidden" onChange={handleContextFileUpload} accept="image/*,.txt" />
+                                </label>
+                            )}
+                        </div>
+
                         <button onClick={handleGenerateAsset} disabled={genLoading || !genPrompt} className="w-full bg-white text-black hover:bg-gray-200 disabled:bg-gray-600 font-bold py-3 rounded uppercase tracking-widest flex items-center justify-center gap-2">
                             {genLoading ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />}
                             {genLoading ? 'Generating...' : 'Generate'}

@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X, PenTool, User as UserIcon, LogOut, Globe } from 'lucide-react';
 import { User, UserRole, Language } from '../types';
-import { getCurrentUser, logoutUser } from '../services/storage';
+import { checkAuthState, logoutUser } from '../services/storage';
 
 interface NavProps {
   language: Language;
@@ -17,11 +17,13 @@ const Nav: React.FC<NavProps> = ({ language, setLanguage }) => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Check for user updates on mount and route change
+  // Use checkAuthState for real-time auth updates and proper role detection
   useEffect(() => {
-    const u = getCurrentUser();
-    setUser(u);
-  }, [location]);
+    const unsubscribe = checkAuthState((u: User | null) => {
+      setUser(u);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleLogout = () => {
     logoutUser();

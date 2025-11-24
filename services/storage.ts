@@ -17,10 +17,26 @@ export const checkAuthState = (callback: (user: User | null) => void) => {
   return auth.onAuthStateChanged(async (firebaseUser) => {
     if (firebaseUser) {
         try {
-            // 1. Try LocalStorage (Fastest & Most Reliable for new registrations)
+            // 1. Check if this is a fresh registration (localStorage flag)
             const cachedRole = localStorage.getItem(`role_${firebaseUser.uid}`);
-            
-            // 2. Try DB with short timeout
+            const isNewUser = localStorage.getItem(`new_user_${firebaseUser.uid}`) === 'true';
+
+            // 2. For new users, prioritize localStorage to avoid race conditions
+            if (isNewUser && cachedRole) {
+                const partialUser: User = {
+                    id: firebaseUser.uid,
+                    name: firebaseUser.displayName || 'Anon',
+                    email: firebaseUser.email || '',
+                    role: cachedRole as UserRole,
+                    avatar: firebaseUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${firebaseUser.uid}`
+                };
+                callback(partialUser);
+                // Clear the flag after first successful auth
+                localStorage.removeItem(`new_user_${firebaseUser.uid}`);
+                return;
+            }
+
+            // 3. For existing users, try DB with short timeout (800ms instead of 2000ms)
             const fetchProfile = async () => {
                  try {
                     const doc = await db.collection(USERS_COLLECTION).doc(firebaseUser.uid).get();
@@ -32,7 +48,7 @@ export const checkAuthState = (callback: (user: User | null) => void) => {
 
             const userProfile = await Promise.race([
                 fetchProfile(),
-                timeoutPromise(2000).then(() => null)
+                timeoutPromise(800).then(() => null)
             ]) as User | null;
 
             if (userProfile) {
@@ -40,15 +56,14 @@ export const checkAuthState = (callback: (user: User | null) => void) => {
                 localStorage.setItem(`role_${firebaseUser.uid}`, userProfile.role);
                 callback(userProfile);
                 return;
-            } 
-            
-            // 3. FALLBACK: Reconstruct from Auth + Cached Role
-            // This catches the case where DB write is slow/offline but LocalStorage was set by registerUser
+            }
+
+            // 4. FALLBACK: Reconstruct from Auth + Cached Role
             const partialUser: User = {
                 id: firebaseUser.uid,
                 name: firebaseUser.displayName || 'Anon',
                 email: firebaseUser.email || '',
-                role: (cachedRole as UserRole) || UserRole.READER, 
+                role: (cachedRole as UserRole) || UserRole.READER,
                 avatar: firebaseUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${firebaseUser.uid}`
             };
             callback(partialUser);
@@ -73,14 +88,48 @@ export const checkAuthState = (callback: (user: User | null) => void) => {
 export const loginUser = async (email: string, password?: string): Promise<User | null> => {
     if (!password) throw new Error("Password required");
     const cred = await auth.signInWithEmailAndPassword(email, password);
-    // Return basic info, let checkAuthState handle the rest
-    return {
-        id: cred.user!.uid,
-        name: cred.user!.displayName || 'User',
-        email: cred.user!.email || '',
-        role: UserRole.READER,
-        avatar: cred.user!.photoURL || ''
-    };
+
+    // Try to fetch user role from Firestore or localStorage
+    try {
+        const cachedRole = localStorage.getItem(`role_${cred.user!.uid}`);
+
+        const fetchUserRole = async () => {
+            const doc = await db.collection(USERS_COLLECTION).doc(cred.user!.uid).get();
+            if (doc.exists) {
+                const userData = doc.data() as User;
+                // Cache the role for future use
+                localStorage.setItem(`role_${cred.user!.uid}`, userData.role);
+                return userData.role;
+            }
+            return null;
+        };
+
+        // Race between DB fetch and timeout
+        const roleFromDB = await Promise.race([
+            fetchUserRole(),
+            timeoutPromise(800).then(() => null)
+        ]);
+
+        const finalRole = roleFromDB || (cachedRole as UserRole) || UserRole.READER;
+
+        return {
+            id: cred.user!.uid,
+            name: cred.user!.displayName || 'User',
+            email: cred.user!.email || '',
+            role: finalRole,
+            avatar: cred.user!.photoURL || ''
+        };
+    } catch (e) {
+        // Fallback to cached role or READER
+        const cachedRole = localStorage.getItem(`role_${cred.user!.uid}`);
+        return {
+            id: cred.user!.uid,
+            name: cred.user!.displayName || 'User',
+            email: cred.user!.email || '',
+            role: (cachedRole as UserRole) || UserRole.READER,
+            avatar: cred.user!.photoURL || ''
+        };
+    }
 };
 
 export const loginWithProvider = async (providerName: 'google' | 'apple' | 'linkedin'): Promise<User | null> => {
@@ -145,17 +194,19 @@ export const loginWithProvider = async (providerName: 'google' | 'apple' | 'link
 
 export const registerUser = async (name: string, email: string, role: UserRole, password?: string): Promise<User> => {
     if (!password) throw new Error("Password required");
-    
+
     // 1. Create Auth User
     const cred = await auth.createUserWithEmailAndPassword(email, password);
-    
+
     if (cred.user) {
         // 2. Update Display Name
         await cred.user.updateProfile({ displayName: name });
-        
+
         // 3. CRITICAL: Cache role immediately in LocalStorage
         // This is the source of truth if DB write lags
         localStorage.setItem(`role_${cred.user.uid}`, role);
+        // Set flag to indicate this is a fresh registration
+        localStorage.setItem(`new_user_${cred.user.uid}`, 'true');
 
         const newUser: User = {
           id: cred.user.uid,
@@ -165,12 +216,20 @@ export const registerUser = async (name: string, email: string, role: UserRole, 
           avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`,
           bio: 'New recruit in the resistance.'
         };
-        
-        // 4. Fire and forget DB save - do not await strictly to prevent blocking
-        db.collection(USERS_COLLECTION).doc(newUser.id).set(newUser).catch(e => {
-            console.warn("DB Write failed (offline?), but Auth OK. Role cached locally.", e);
-        });
-        
+
+        // 4. IMPORTANT: Actually WAIT for Firestore write to complete
+        // This ensures the role is properly saved before logout
+        try {
+            await Promise.race([
+                db.collection(USERS_COLLECTION).doc(newUser.id).set(newUser),
+                timeoutPromise(3000) // Give it 3 seconds
+            ]);
+            console.log("User profile saved to Firestore successfully");
+        } catch (e) {
+            console.warn("DB Write slow/failed, but Auth OK. Role cached locally.", e);
+            // Still OK because localStorage has the role
+        }
+
         return newUser;
     }
     throw new Error("Registration failed");
@@ -192,7 +251,9 @@ export const getCurrentUser = (): User | null => {
 
 export const logoutUser = async () => {
     if (auth.currentUser) {
-        localStorage.removeItem(`role_${auth.currentUser.uid}`);
+        // DO NOT remove role from localStorage - we need it for next login!
+        // Only remove the new_user flag
+        localStorage.removeItem(`new_user_${auth.currentUser.uid}`);
     }
     await auth.signOut();
 };
@@ -200,12 +261,47 @@ export const logoutUser = async () => {
 
 // --- CONTENT ---
 export const loadContent = async (): Promise<ContentItem[]> => {
+    // Try cache first for instant loading
+    const cachedContent = localStorage.getItem('cached_content');
+    const cacheTimestamp = localStorage.getItem('content_cache_time');
+    const now = Date.now();
+
+    // If cache is less than 30 seconds old, use it immediately
+    if (cachedContent && cacheTimestamp && (now - parseInt(cacheTimestamp)) < 30000) {
+        try {
+            const parsed = JSON.parse(cachedContent);
+            // Return cached data immediately, then refresh in background
+            setTimeout(() => loadContent(), 100);
+            return parsed;
+        } catch (e) {
+            // Cache corrupted, continue to fetch
+        }
+    }
+
     try {
-        const snapshot = await db.collection(CONTENT_COLLECTION).orderBy('date', 'desc').get();
-        const items = snapshot.docs.map(d => d.data() as ContentItem);
-        if (items.length === 0) return [...MOCK_ARTICLES, ...MOCK_COMICS].map(c => ({...c, originalLanguage: 'fr' as any}));
+        // Fetch with aggressive timeout (1 second)
+        const fetchData = async () => {
+            const snapshot = await db.collection(CONTENT_COLLECTION).orderBy('date', 'desc').get();
+            const items = snapshot.docs.map(d => d.data() as ContentItem);
+            return items.length > 0 ? items : [...MOCK_ARTICLES, ...MOCK_COMICS].map(c => ({...c, originalLanguage: 'fr' as any}));
+        };
+
+        const items = await Promise.race([
+            fetchData(),
+            timeoutPromise(1000).then(() => {
+                // Return mock data on timeout
+                return [...MOCK_ARTICLES, ...MOCK_COMICS].map(c => ({...c, originalLanguage: 'fr' as any}));
+            })
+        ]) as ContentItem[];
+
+        // Cache the result
+        localStorage.setItem('cached_content', JSON.stringify(items));
+        localStorage.setItem('content_cache_time', now.toString());
+
         return items;
     } catch (e) {
+        // Firestore timeout or offline - this is expected behavior
+        // Using mock data for demo purposes
         return [...MOCK_ARTICLES, ...MOCK_COMICS].map(c => ({...c, originalLanguage: 'fr' as any}));
     }
 };

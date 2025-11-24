@@ -25,14 +25,16 @@ const db = app.firestore();
 const auth = app.auth();
 const storage = app.storage();
 
-// Enable offline persistence to avoid "client is offline" errors
-db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
-  if (err.code === 'failed-precondition') {
-    console.warn('Persistence failed: Multiple tabs open');
-  } else if (err.code === 'unimplemented') {
-    console.warn('Persistence failed: Browser not supported');
-  }
-});
+// Disable offline persistence to improve initial load speed
+// Persistence was causing 10-15 second delays on first load
+// Using localStorage cache instead for faster UX
+// db.enablePersistence().catch((err) => {
+//   if (err.code === 'failed-precondition') {
+//     console.warn('Persistence failed: Multiple tabs open');
+//   } else if (err.code === 'unimplemented') {
+//     console.warn('Persistence failed: Browser not supported');
+//   }
+// });
 
 // Export empty analytics to keep TypeScript happy without running the code
 const analytics = null;

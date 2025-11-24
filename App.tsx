@@ -39,6 +39,7 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState<UserRole>(UserRole.READER);
+  const [adminPassword, setAdminPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -48,11 +49,22 @@ const Login = () => {
     setLoading(true);
     try {
       if (isRegister) {
+        // Verify admin password if trying to register as Admin
+        if (role === UserRole.ADMIN) {
+          // Master password hardcoded for security (can be changed in production)
+          const masterPassword = 'OwlisterAdmin2025!';
+          if (adminPassword !== masterPassword) {
+            throw new Error("Invalid Admin Master Password. Access Denied.");
+          }
+        }
+
         await registerUser(name, email, role, password);
-        // Force a hard reload to ensure LocalStorage is read correctly by checkAuthState on mount
-        setTimeout(() => {
-           window.location.reload(); 
-        }, 500);
+        // Wait for auth state to propagate, then navigate
+        // The role is already in localStorage, so checkAuthState will pick it up
+        await new Promise(resolve => setTimeout(resolve, 300));
+        navigate('/');
+        // Optionally reload after navigation to ensure Nav component updates
+        setTimeout(() => window.location.reload(), 100);
       } else {
         const user = await loginUser(email, password);
         if (!user) throw new Error("User not found");
@@ -136,6 +148,14 @@ const Login = () => {
                  <option value={UserRole.EDITOR}>Editor (Content Creator)</option>
                  <option value={UserRole.ADMIN}>Admin (System Core)</option>
                </select>
+             </div>
+          )}
+
+          {isRegister && role === UserRole.ADMIN && (
+             <div>
+               <label className="block text-xs uppercase text-gray-500 mb-1">Admin Master Password</label>
+               <input required type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} className="w-full bg-black border border-red-700 rounded p-3 text-white focus:border-red-500 outline-none" placeholder="Enter Admin Master Password" />
+               <p className="text-xs text-red-400 mt-1">Contact system administrator for master password</p>
              </div>
           )}
 

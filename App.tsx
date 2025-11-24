@@ -49,15 +49,19 @@ const Login = () => {
     try {
       if (isRegister) {
         await registerUser(name, email, role, password);
+        // Force a small delay or reload to ensure state propagates
+        setTimeout(() => {
+           // We navigate to home, Nav component will pick up the user from LocalStorage/Auth
+           window.location.href = "/"; 
+        }, 500);
       } else {
         const user = await loginUser(email, password);
         if (!user) throw new Error("User not found");
+        navigate('/');
       }
-      navigate('/');
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Authentication failed. Check console.");
-    } finally {
       setLoading(false);
     }
   };
@@ -196,7 +200,7 @@ const Home = ({ language }: { language: Language }) => {
             <div key={item.id} className="break-inside-avoid bg-card-bg/80 backdrop-blur-sm rounded-xl border border-neon-green overflow-hidden hover:border-neon-purple hover:shadow-[0_0_20px_rgba(176,38,255,0.3)] transition-all duration-300 group">
                 <Link to={item.type === ContentType.ARTICLE ? `/article/${item.id}` : `/comic/${item.id}`}>
                 <div className="relative aspect-[4/3] overflow-hidden">
-                    <img src={item.coverImage} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    <img src={item.coverImage} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
                     <div className="absolute top-3 left-3 flex gap-2">
                     <div className="bg-black/70 backdrop-blur-sm px-3 py-1 rounded-full border border-white/10">
                         <span className="text-xs font-bold font-roboto text-white uppercase tracking-wider">

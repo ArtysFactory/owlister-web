@@ -41,14 +41,19 @@ export const checkAuthState = (callback: (user: User | null) => void) => {
         }
 
         if (userProfile) {
+            // Update local cache with fresh data from DB
+            localStorage.setItem(`role_${firebaseUser.uid}`, userProfile.role);
             callback(userProfile);
         } else {
              // Fallback: Reconstruct from Auth data immediately
+             // IMPORTANT: Check LocalStorage for the Role to prevent reverting to READER
+            const cachedRole = localStorage.getItem(`role_${firebaseUser.uid}`);
+            
             const partialUser: User = {
                 id: firebaseUser.uid,
                 name: firebaseUser.displayName || 'Anon',
                 email: firebaseUser.email || '',
-                role: UserRole.READER,
+                role: (cachedRole as UserRole) || UserRole.READER,
                 avatar: firebaseUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${firebaseUser.uid}`
             };
             callback(partialUser);
@@ -67,7 +72,7 @@ export const loginUser = async (email: string, password?: string): Promise<User 
         id: cred.user!.uid,
         name: cred.user!.displayName || 'User',
         email: cred.user!.email || '',
-        role: UserRole.READER,
+        role: UserRole.READER, // Role will be updated by checkAuthState via DB or Cache
         avatar: cred.user!.photoURL || ''
     };
 };
@@ -144,6 +149,10 @@ export const registerUser = async (name: string, email: string, role: UserRole, 
     if (cred.user) {
         await cred.user.updateProfile({ displayName: name });
         
+        // IMPORTANT: Save role to LocalStorage immediately so checkAuthState can find it
+        // even if DB write fails or is slow
+        localStorage.setItem(`role_${cred.user.uid}`, role);
+
         const newUser: User = {
           id: cred.user.uid,
           name,
@@ -170,11 +179,13 @@ export const registerUser = async (name: string, email: string, role: UserRole, 
 
 export const getCurrentUser = (): User | null => {
     if (auth.currentUser) {
+        // Try to recover role from cache if possible
+        const cachedRole = localStorage.getItem(`role_${auth.currentUser.uid}`);
         return {
             id: auth.currentUser.uid,
             name: auth.currentUser.displayName || 'User',
             email: auth.currentUser.email || '',
-            role: UserRole.READER,
+            role: (cachedRole as UserRole) || UserRole.READER,
             avatar: auth.currentUser.photoURL || ''
         }
     }
@@ -182,7 +193,10 @@ export const getCurrentUser = (): User | null => {
 };
 
 export const logoutUser = async () => {
-  await auth.signOut();
+    if (auth.currentUser) {
+        localStorage.removeItem(`role_${auth.currentUser.uid}`);
+    }
+    await auth.signOut();
 };
 
 

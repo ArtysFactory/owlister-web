@@ -2,7 +2,8 @@ import firebase from 'firebase/compat/app';
 import 'firebase/compat/auth';
 import 'firebase/compat/firestore';
 import 'firebase/compat/storage';
-import 'firebase/compat/analytics';
+// Analytics removed to prevent ad-blocker hanging issues
+// import 'firebase/compat/analytics';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCpLEKhHKr1zy98uyIlIRKPgPW9r22uqFc",
@@ -33,11 +34,7 @@ db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
   }
 });
 
-let analytics = null;
-if (typeof window !== 'undefined') {
-  if (firebase.analytics && typeof firebase.analytics === 'function') {
-      analytics = firebase.analytics();
-  }
-}
+// Export empty analytics to keep TypeScript happy without running the code
+const analytics = null;
 
 export { db, auth, storage, analytics };

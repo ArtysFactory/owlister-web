@@ -1,0 +1,63 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && getUserData().role == 'admin';
+    }
+    
+    function isContributor() {
+      return isAuthenticated() && (getUserData().role == 'contributor' || getUserData().role == 'admin');
+    }
+
+    // Users
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin(); // Only admin can change roles/users
+      allow update: if request.auth.uid == userId; // User can update own profile
+    }
+
+    // Posts
+    match /posts/{postId} {
+      allow read: if resource.data.status == 'published' || isContributor();
+      allow create: if isContributor();
+      allow update: if isContributor(); // Add more granular checks if needed (e.g. own posts)
+      allow delete: if isAdmin();
+    }
+
+    // Series (Comics)
+    match /series/{seriesId} {
+      allow read: if resource.data.status != 'draft' || isContributor(); // Assuming status field exists
+      allow write: if isContributor();
+    }
+
+    // Chapters
+    match /chapters/{chapterId} {
+      allow read: if resource.data.status == 'published' || isContributor();
+      allow write: if isContributor();
+    }
+    
+    // Chapter Images
+    match /chapterImages/{imageId} {
+      allow read: if true; // Or restrict based on chapter status
+      allow write: if isContributor();
+    }
+
+    // Comments
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if isAuthenticated(); // Must be logged in to comment? Or public? Instructions said "Possibilité de liker, commenter"
+      allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.authorId == request.auth.uid);
+    }
+  }
+}

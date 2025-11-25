@@ -7,8 +7,9 @@ import { Post } from "@/lib/types";
 import { createPost, updatePost } from "@/lib/services/posts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { RichTextEditor } from "@/components/admin/rich-text-editor";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Save, ArrowLeft, Wand2 } from "lucide-react";
+import { Loader2, Save, ArrowLeft, Wand2, Image as ImageIcon } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { generateOutline, generateDraft, generateSeoMetadata } from "@/lib/ai/gemini";
@@ -151,13 +152,12 @@ export function PostForm({ post }: PostFormProps) {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Contenu (Markdown)</label>
-                                <textarea
-                                    {...register("content", { required: true })}
-                                    className="flex min-h-[400px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border-secondary/20 font-mono"
-                                    placeholder="# Votre contenu ici..."
+                                <label className="text-sm font-medium">Contenu</label>
+                                <RichTextEditor
+                                    content={watch("content") || ""}
+                                    onChange={(value) => setValue("content", value)}
                                 />
-                                {errors.content && <span className="text-xs text-error">Requis</span>}
+                                {errors.content && <span className="text-xs text-error">Ce champ est requis</span>}
                             </div>
                         </CardContent>
                     </Card>

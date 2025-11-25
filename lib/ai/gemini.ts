@@ -67,6 +67,39 @@ export async function generateSeoMetadata(content: string): Promise<{ title: str
     }
 }
 
+export async function generateContentWithMedia(prompt: string, files: File[]): Promise<string> {
+    const model = getGenerativeModel(ai, { model: MODEL_NAME }); // Use MODEL_NAME for consistency
+    const parts: any[] = [{ text: prompt }];
+
+    for (const file of files) {
+        const base64 = await fileToGenerativePart(file);
+        parts.push(base64);
+    }
+
+    const result = await model.generateContent(parts);
+    const response = await result.response;
+    return response.text();
+}
+
+async function fileToGenerativePart(file: File): Promise<{ inlineData: { data: string; mimeType: string } }> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64String = reader.result as string;
+            // Remove data url prefix (e.g. "data:image/jpeg;base64,")
+            const base64 = base64String.split(",")[1];
+            resolve({
+                inlineData: {
+                    data: base64,
+                    mimeType: file.type
+                },
+            });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
 // Placeholder for Image Generation
 // Note: The JS SDK for Vertex AI in Firebase might not support Imagen directly yet in the same way.
 // We might need to use a Cloud Function or a specific model call if supported.

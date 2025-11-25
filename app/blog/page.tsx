@@ -8,13 +8,13 @@ import { fr } from "date-fns/locale";
 export const revalidate = 60;
 
 export default async function BlogPage() {
-    const posts = await getPublishedPosts(50); // Fetch up to 50 posts
+    const posts = await getPublishedPosts(50);
 
     return (
-        <div className="container py-12 space-y-8">
-            <div className="space-y-4">
-                <h1 className="text-4xl font-bold font-display">Le Blog</h1>
-                <p className="text-muted-foreground text-lg max-w-2xl">
+        <div className="container py-24 space-y-12">
+            <div className="space-y-4 text-center max-w-2xl mx-auto">
+                <h1 className="text-4xl md:text-5xl font-bold font-display text-gradient">Le Blog</h1>
+                <p className="text-muted-foreground text-lg">
                     Retrouvez tous nos articles sur l'univers du webtoon, nos tutoriels et nos actualités.
                 </p>
             </div>
@@ -23,9 +23,9 @@ export default async function BlogPage() {
                 {posts.length > 0 ? (
                     posts.map((post) => (
                         <Link key={post.id} href={`/blog/${post.slug}`}>
-                            <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer flex flex-col">
+                            <Card className="h-full hover:bg-surface-highlight/50 transition-colors border-white/5 flex flex-col">
                                 {post.coverImageUrl && (
-                                    <div className="aspect-video w-full overflow-hidden rounded-t-lg">
+                                    <div className="aspect-video w-full overflow-hidden rounded-t-xl">
                                         <img
                                             src={post.coverImageUrl}
                                             alt={post.title}
@@ -36,18 +36,20 @@ export default async function BlogPage() {
                                 <CardHeader>
                                     <div className="flex gap-2 mb-2">
                                         {post.tags.slice(0, 3).map((tag) => (
-                                            <Badge key={tag} variant="secondary" className="text-xs">
+                                            <Badge key={tag} variant="outline" className="text-xs border-white/10 text-muted-foreground">
                                                 {tag}
                                             </Badge>
                                         ))}
                                     </div>
-                                    <CardTitle className="line-clamp-2">{post.title}</CardTitle>
+                                    <CardTitle className="line-clamp-2 text-xl group-hover:text-primary transition-colors">
+                                        {post.title}
+                                    </CardTitle>
                                 </CardHeader>
                                 <CardContent className="flex-1 flex flex-col justify-between">
                                     <p className="text-muted-foreground text-sm line-clamp-3 mb-4">
                                         {post.excerpt || post.content.substring(0, 150) + "..."}
                                     </p>
-                                    <p className="text-xs text-muted-foreground mt-auto pt-4 border-t">
+                                    <p className="text-xs text-muted-foreground/60 mt-auto pt-4 border-t border-white/5">
                                         {format(post.createdAt, "d MMMM yyyy", { locale: fr })}
                                     </p>
                                 </CardContent>

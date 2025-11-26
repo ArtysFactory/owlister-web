@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
-import { Inter, Space_Grotesk } from "next/font/google";
+import { Orbitron, Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 
-const inter = Inter({
-  variable: "--font-inter",
+const orbitron = Orbitron({
+  variable: "--font-orbitron",
   subsets: ["latin"],
 });
 
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-space-grotesk",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
@@ -26,7 +26,7 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body
-        className={`${inter.variable} ${spaceGrotesk.variable} antialiased bg-background text-text font-sans`}
+        className={`${orbitron.variable} ${inter.variable} antialiased bg-raisin-black text-ghost-white font-inter`}
       >
         <Providers>
           {children}

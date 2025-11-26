@@ -5,10 +5,11 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3003",
     "lint": "eslint"
   },
   "dependencies": {
+    "@radix-ui/react-slot": "^1.2.4",
     "@tiptap/extension-color": "^3.11.0",
     "@tiptap/extension-image": "^3.11.0",
     "@tiptap/extension-link": "^3.11.0",
